@@ -79,7 +79,18 @@ vec4 texture2D(const sampler2D& sampler, const vec2& uv) {
   auto px_y = size_t(buv.y * sampler.height);
   // TODO linear interpolation on pixel values
   if (sampler.linearFiltering) {
-  }
+    auto u = uv.x * sampler.width  - 0.5f;
+    auto v = (uv.y * sampler.height - 0.5f);
+    auto x = int(floor(u));
+    auto y = int(floor(v));
+    auto u_ratio = u - x;
+    auto v_ratio = v - y;
+    auto u_opp = 1 - u_ratio;
+    auto v_opp = 1 - v_ratio;
+
+    return (vec4(sampler.pixels[(y * sampler.width) + x]) * u_opp + vec4(sampler.pixels[(y * sampler.width) + (x+2)]) * u_ratio) * v_opp +
+        (vec4(sampler.pixels[((y+1) * sampler.width) + x]) * u_opp + vec4(sampler.pixels[((y+1) * sampler.width) + (x+1)]) * u_ratio) * v_ratio;
+        }
 
   // return the selected pixel
   return sampler.pixels[px_y * sampler.width + px_x];
