@@ -294,8 +294,8 @@ int main() {
   printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
   printf("  Bmax               : %f, %f, %f\n", bmax[0], bmax[1], bmax[2]);
 
-  const size_t width = 1024;
-  const size_t height = 1024;
+  const size_t width = 8192;
+  const size_t height = 8192;
 
   std::vector<pixel> img(width * height);
   // memset(img.data(), 255, img.size() * sizeof(pixel));
@@ -303,7 +303,7 @@ int main() {
 #ifdef _OPENMP
   printf("This program was buit with OpenMP support\n");
   printf("NanoRT main loop using #pragma omp parallel for\n");
-//#pragma omp parallel for
+#pragma omp parallel for
 #endif
   for (int y = 0; y < height; ++y)
     for (int x = 0; x < width; ++x) {
