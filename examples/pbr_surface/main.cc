@@ -173,18 +173,16 @@ int main() {
                    "environment_top_0.jpg", "environment_bottom_0.jpg",
                    "environment_front_0.jpg", "environment_back_0.jpg"});
 
-  // Free the
+  // Data was copied into the sampler objects, free the images
   stbi_image_free(normdata);
   stbi_image_free(colData);
   stbi_image_free(roughData);
   stbi_image_free(metalData);
   stbi_image_free(brdfLUTData);
 
-  // Here the metal and roughness data are mixed together
-
   PbrMaterial<float> material;
   material.metalness = 1;
-  material.roughness = 0;
+  material.roughness = 1;
   material.albedo.r = 0.5;
   material.albedo.g = 0.5;
   material.albedo.b = 0.5;
@@ -296,19 +294,19 @@ int main() {
   printf("  Bmin               : %f, %f, %f\n", bmin[0], bmin[1], bmin[2]);
   printf("  Bmax               : %f, %f, %f\n", bmax[0], bmax[1], bmax[2]);
 
-  const size_t width = 8192;
-  const size_t height = 8192;
+  const size_t width = 1024;
+  const size_t height = 1024;
 
   std::vector<pixel> img(width * height);
   // memset(img.data(), 255, img.size() * sizeof(pixel));
 
 #ifdef _OPENMP
   printf("This program was buit with OpenMP support\n");
-  printf("NanoRT main loop using #pragma omp parallel for");
-#pragma omp parallel for
+  printf("NanoRT main loop using #pragma omp parallel for\n");
+//#pragma omp parallel for
 #endif
-  for (int y{0}; y < height; ++y)
-    for (int x{0}; x < width; ++x) {
+  for (int y = 0; y < height; ++y)
+    for (int x = 0; x < width; ++x) {
       // access pixel we are going to calculate
       auto& pixel = img[(y * width) + x];
       pixel.r = pixel.g = pixel.b = 0;
@@ -442,6 +440,7 @@ int main() {
   metalRoughMap.releasePixels();
   specularEnvMap.releasePixels();
   diffuseEnvMap.releasePixels();
+  brdfLUT.releasePixels();
 
   return 0;
 }
