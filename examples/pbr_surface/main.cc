@@ -299,8 +299,9 @@ int main() {
   std::vector<pixel> img(width * height);
   // memset(img.data(), 255, img.size() * sizeof(pixel));
 
-  for (size_t y{0}; y < height; ++y)
-    for (size_t x{0}; x < width; ++x) {
+  #pragma omp parallel for
+  for (int y{0}; y < height; ++y)
+    for (int x{0}; x < width; ++x) {
       // access pixel we are going to calculate
       auto& pixel = img[(y * width) + x];
       pixel.r = pixel.g = pixel.b = 0;
@@ -355,7 +356,7 @@ int main() {
           if (!accel.Traverse(lightRay, triangle_intersector, &isect)) {
             // This object represet a fragment shader, and is literally a
             // translation in C++ from an official example from khronos
-            static pbr_maths::PBRShaderCPU shader;
+            pbr_maths::PBRShaderCPU shader;
 
             // Fill in the uniform/varying variables
             shader.u_Camera.x = camRay.org[0];
