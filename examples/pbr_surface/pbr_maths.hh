@@ -10,9 +10,9 @@
 
 namespace pbr_maths {
 
-constexpr static float const c_MinRoughness = 0.04;
+constexpr static float const c_MinRoughness = 0.04f;
 #ifndef M_PI
-constexpr static float const M_PI = 3.141592653589793;
+constexpr static float const M_PI = 3.141592653589793f;
 #endif
 // GLSL data types
 using glm::mat3;
@@ -65,7 +65,7 @@ struct sampler2D {
     // wrap uvs
     vec2 buv;
 
-    auto in_bound = [](float a) {
+    const auto in_bound = [](const float a) {
       clamp(a, 0.f, 0.99999f);
       return a;
     };
@@ -80,9 +80,7 @@ struct sampler2D {
     return std::make_tuple(px_x, px_y);
   }
 
-  pixel getPixel(const vec2& uv) const
-  { return getPixel(getPixelUV(uv));
-  }
+  pixel getPixel(const vec2& uv) const { return getPixel(getPixelUV(uv)); }
 
   /// Activate texture filtering
   mutable bool linearFiltering = false;
@@ -95,34 +93,34 @@ struct sampler2D {
 };
 
 /// Simple linear interpolation on floats
-float lerp(float a, float b, float f) { return a + f * (b - a); }
-
-
+inline float lerp(float a, float b, float f) { return a + f * (b - a); }
 
 /// Replicate the texture2D function from GLSL
-vec4 texture2D(const sampler2D& sampler, const vec2& uv) {
-  auto pixelUV = sampler.getPixelUV(uv);
-  auto px_x = std::get<0>(pixelUV);
-  auto px_y = std::get<1>(pixelUV);
-
-  // TODO linear interpolation on pixel values
+inline vec4 texture2D(const sampler2D& sampler, const vec2& uv) {
+  // If GL_LINEAR emulation
   if (sampler.linearFiltering) {
+    // Calculate texture/texel size. mandatory to support non-square textures
     const auto textureSize = vec2(sampler.width, sampler.height);
     const auto texelSize = vec2(1.0f / textureSize.x, 1.0f / textureSize.y);
 
-    vec4 tl = sampler.getPixel(uv);
-    vec4 tr = sampler.getPixel(uv + vec2(texelSize.x, 0));
-    vec4 bl = sampler.getPixel(uv + vec2(0, texelSize.y));
-    vec4 br = sampler.getPixel(uv + texelSize);
+    // Sample the nearest texel, and a few around it
+    const vec4 tl = sampler.getPixel(uv);
+    const vec4 tr = sampler.getPixel(uv + vec2(texelSize.x, 0));
+    const vec4 bl = sampler.getPixel(uv + vec2(0, texelSize.y));
+    const vec4 br = sampler.getPixel(uv + texelSize);
 
-    vec2 f = fract(uv * textureSize);
-    vec4 tA = mix(tl, tr, f.x);
-    vec4 tB = mix(bl, br, f.x);
+    // Calculate the contribution of texlers around ot the color of the sampled
+    // pixel
+    const vec2 f = fract(uv * textureSize);
+
+    // Calculate and return the final color value
+    const vec4 tA = mix(tl, tr, f.x);
+    const vec4 tB = mix(bl, br, f.x);
     return mix(tA, tB, f.y);
   }
 
-  // return the selected pixel
-  return sampler.pixels[px_y * sampler.width + px_x];
+  // return the nearest texel
+  return sampler.getPixel(uv);
 }
 
 /// Cubemap sampler object
@@ -137,17 +135,17 @@ struct samplerCube {
   }
 };
 
-void convert_xyz_to_cube_uv(float x, float y, float z, int* index, float* u,
-                            float* v) {
-  float absX = fabs(x);
-  float absY = fabs(y);
-  float absZ = fabs(z);
+inline void convert_xyz_to_cube_uv(float x, float y, float z, int* index,
+                                   float* u, float* v) {
+  const auto absX = fabs(x);
+  const auto absY = fabs(y);
+  const auto absZ = fabs(z);
 
-  int isXPositive = x > 0 ? 1 : 0;
-  int isYPositive = y > 0 ? 1 : 0;
-  int isZPositive = z > 0 ? 1 : 0;
+  const auto isXPositive = x > 0 ? true : false;
+  const auto isYPositive = y > 0 ? true : false;
+  const auto isZPositive = z > 0 ? true : false;
 
-  float maxAxis, uc, vc;
+  float maxAxis = 0, uc = 0, vc = 0;
 
   // POSITIVE X
   if (isXPositive && absX >= absY && absX >= absZ) {
@@ -209,14 +207,14 @@ void convert_xyz_to_cube_uv(float x, float y, float z, int* index, float* u,
   *v = 0.5f * (vc / maxAxis + 1.0f);
 }
 
-vec4 textureCube(const samplerCube& sampler, vec3 direction) {
-  int i;
+inline vec4 textureCube(const samplerCube& sampler, const vec3& direction) {
+  int faceIndex;
   vec2 uv;
   normalize(direction);
-  convert_xyz_to_cube_uv(direction.x, direction.y, direction.z, &i, &uv.s,
-                         &uv.t);
+  convert_xyz_to_cube_uv(direction.x, direction.y, direction.z, &faceIndex,
+                         &uv.s, &uv.t);
   uv.t = 1 - uv.t;
-  return texture2D(sampler.faces[i], uv);
+  return texture2D(sampler.faces[faceIndex], uv);
 }
 
 // This datastructure is used throughough the code here
@@ -248,13 +246,13 @@ struct PBRShaderCPU {
 
   // TODO This is just a pass-through function. This will de pend on the color
   // space used on the fed textures...
-  vec4 SRGBtoLINEAR(vec4 srgbIn) {
+  vec4 SRGBtoLINEAR(vec4 srgbIn) const {
 #ifdef MANUAL_SRGB
 #ifdef SRGB_FAST_APPROXIMATION
     vec3 linOut = pow(srgbIn.xyz, vec3(2.2));
 #else   // SRGB_FAST_APPROXIMATION
-    vec3 bLess = step(vec3(0.04045), vec3(srgbIn));
-    vec3 linOut =
+    const vec3 bLess = step(vec3(0.04045), vec3(srgbIn));
+    const vec3 linOut =
         mix(vec3(srgbIn) / vec3(12.92),
             pow((vec3(srgbIn) + vec3(0.055)) / vec3(1.055), vec3(2.4)), bLess);
 #endif  // SRGB_FAST_APPROXIMATION
@@ -266,25 +264,26 @@ struct PBRShaderCPU {
   }
   // Calculation of the lighting contribution from an optional Image Based Light
   // source.
-  // Precomputed Environment Maps are required uniform inputs and are computed
+  // Precomputed Environment Maps are required  inputs and are computed
   // as outlined in [1]. See our README.md on Environment Maps [3] for
   // additional discussion.
-  vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection) {
-    float mipCount = 9.0;  // resolution of 512x512
+  vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection) const {
+    const float mipCount = 9.0;  // resolution of 512x512
     float lod = pbrInputs.perceptualRoughness * mipCount;
     // retrieve a scale and bias to F0. See [1], Figure 3
-    vec3 brdf = vec3(SRGBtoLINEAR(
+    const vec3 brdf = vec3(SRGBtoLINEAR(
         texture2D(u_brdfLUT,
                   vec2(pbrInputs.NdotV, 1.0 - pbrInputs.perceptualRoughness))));
 
-    vec3 diffuseLight = vec3(SRGBtoLINEAR(textureCube(u_DiffuseEnvSampler, n)));
+    const vec3 diffuseLight =
+        vec3(SRGBtoLINEAR(textureCube(u_DiffuseEnvSampler, n)));
 
 #ifdef USE_TEX_LOD
     vec3 specularLight =
         SRGBtoLINEAR(textureCubeLodEXT(u_SpecularEnvSampler, reflection, lod))
             .rgb;
 #else
-    vec3 specularLight =
+    const vec3 specularLight =
         vec3(SRGBtoLINEAR(textureCube(u_SpecularEnvSampler, reflection)));
 #endif
 
@@ -309,7 +308,7 @@ struct PBRShaderCPU {
       // Roughness is stored in the 'g' channel, metallic is stored in the 'b'
       // channel. This layout intentionally reserves the 'r' channel for
       // (optional) occlusion map data
-      vec4 mrSample = texture2D(u_MetallicRoughnessSampler, v_UV);
+      const vec4 mrSample = texture2D(u_MetallicRoughnessSampler, v_UV);
 
       // NOTE: G channel of the map is used for roughness, B channel is used for
       // metalness
@@ -321,7 +320,7 @@ struct PBRShaderCPU {
     metallic = clamp(metallic, 0.0f, 1.0f);
     // Roughness is authored as perceptual roughness; as is convention,
     // convert to material roughness by squaring the perceptual roughness [2].
-    float alphaRoughness = perceptualRoughness * perceptualRoughness;
+    const float alphaRoughness = perceptualRoughness * perceptualRoughness;
 
     // The albedo may be defined from a base texture or a flat color
     vec4 baseColor;
@@ -335,7 +334,7 @@ struct PBRShaderCPU {
     vec3 f0 = vec3(0.04);
     vec3 diffuseColor = vec3(baseColor) * (vec3(1.0) - f0);
     diffuseColor *= 1.0 - metallic;
-    vec3 specularColor = mix(f0, vec3(baseColor), metallic);
+    const vec3 specularColor = mix(f0, vec3(baseColor), metallic);
 
     // Compute reflectance.
     float reflectance =
@@ -345,45 +344,46 @@ struct PBRShaderCPU {
     // grazing reflectance to 100% for typical fresnel effect. For very low
     // reflectance range on highly diffuse objects (below 4%), incrementally
     // reduce grazing reflecance to 0%.
-    float reflectance90 = clamp(reflectance * 25.0, 0.0, 1.0);
-    vec3 specularEnvironmentR0 = specularColor;
-    vec3 specularEnvironmentR90 = vec3(1.0, 1.0, 1.0) * reflectance90;
+    const float reflectance90 = clamp(reflectance * 25.0, 0.0, 1.0);
+    const vec3 specularEnvironmentR0 = specularColor;
+    const vec3 specularEnvironmentR90 = vec3(1.0, 1.0, 1.0) * reflectance90;
 
-    vec3 n = getNormal();  // normal at surface point
-    vec3 v = normalize(u_Camera -
-                       v_Position);  // Vector from surface point to camera
-    vec3 l = normalize(u_LightDirection);  // Vector from surface point to light
-    vec3 h = normalize(l + v);             // Half vector between both l and v
-    vec3 reflection = -normalize(reflect(v, n));
+    const vec3 n = getNormal();  // normal at surface point
+    const vec3 v = normalize(
+        u_Camera - v_Position);  // Vector from surface point to camera
+    const vec3 l =
+        normalize(u_LightDirection);  // Vector from surface point to light
+    const vec3 h = normalize(l + v);  // Half vector between both l and v
+    const vec3 reflection = -normalize(reflect(v, n));
 
-    float NdotL = clamp(dot(n, l), 0.001f, 1.0f);
-    float NdotV = clamp(std::abs(dot(n, v)), 0.001f, 1.0f);
-    float NdotH = clamp(dot(n, h), 0.0f, 1.0f);
-    float LdotH = clamp(dot(l, h), 0.0f, 1.0f);
-    float VdotH = clamp(dot(v, h), 0.0f, 1.0f);
+    const float NdotL = clamp(dot(n, l), 0.001f, 1.0f);
+    const float NdotV = clamp(std::abs(dot(n, v)), 0.001f, 1.0f);
+    const float NdotH = clamp(dot(n, h), 0.0f, 1.0f);
+    const float LdotH = clamp(dot(l, h), 0.0f, 1.0f);
+    const float VdotH = clamp(dot(v, h), 0.0f, 1.0f);
 
-    // Hey, modern C++ uniform initialiazation syntax just works!
-    PBRInfo pbrInputs = PBRInfo{NdotL,
-                                NdotV,
-                                NdotH,
-                                LdotH,
-                                VdotH,
-                                perceptualRoughness,
-                                metallic,
-                                specularEnvironmentR0,
-                                specularEnvironmentR90,
-                                alphaRoughness,
-                                diffuseColor,
-                                specularColor};
+    // Hey, modern C++  initialiazation syntax just works!
+    const PBRInfo pbrInputs = PBRInfo{NdotL,
+                                      NdotV,
+                                      NdotH,
+                                      LdotH,
+                                      VdotH,
+                                      perceptualRoughness,
+                                      metallic,
+                                      specularEnvironmentR0,
+                                      specularEnvironmentR90,
+                                      alphaRoughness,
+                                      diffuseColor,
+                                      specularColor};
 
     // Calculate the shading terms for the microfacet specular shading model
-    vec3 F = specularReflection(pbrInputs);
-    float G = geometricOcclusion(pbrInputs);
-    float D = microfacetDistribution(pbrInputs);
+    const vec3 F = specularReflection(pbrInputs);
+    const float G = geometricOcclusion(pbrInputs);
+    const float D = microfacetDistribution(pbrInputs);
 
     // Calculation of analytical lighting contribution
-    vec3 diffuseContrib = (1.0f - F) * diffuse(pbrInputs);
-    vec3 specContrib = F * G * D / (4.0f * NdotL * NdotV);
+    const vec3 diffuseContrib = (1.0f - F) * diffuse(pbrInputs);
+    const vec3 specContrib = F * G * D / (4.0f * NdotL * NdotV);
     // Obtain final intensity as reflectance (BRDF) scaled by the energy of the
     // light (cosine law)
     vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
@@ -397,12 +397,12 @@ struct PBRShaderCPU {
     // Apply optional PBR terms for additional (optional) shading
 
     if (useOcclusionMap) {
-      float ao = texture2D(u_OcclusionSampler, v_UV).r;
+      const float ao = texture2D(u_OcclusionSampler, v_UV).r;
       color = mix(color, color * ao, u_OcclusionStrength);
     }
 
     if (useEmissiveMap) {
-      vec3 emissive = SRGBtoLINEAR(
+      const vec3 emissive = SRGBtoLINEAR(
           vec4(vec3(texture2D(u_EmissiveSampler, v_UV)) * u_EmissiveFactor, 1));
       color += emissive;
     }
@@ -425,7 +425,7 @@ struct PBRShaderCPU {
   // Find the normal for this fragment, pulling either from a predefined normal
   // map
   // or from the interpolated mesh normal and tangent attributes.
-  vec3 getNormal() {
+  vec3 getNormal() const {
   // Retrieve the tangent space matrix
 #ifndef HAS_TANGENTS
     /*    vec3 pos_dx = dFdx(v_Position);
@@ -444,8 +444,8 @@ struct PBRShaderCPU {
     // This is some random hack to calculate "a" tangent vector
     vec3 t;
 
-    vec3 c1 = cross(ng, vec3(0.0, 0.0, 1.0));
-    vec3 c2 = cross(ng, vec3(0.0, 1.0, 0.0));
+    const vec3 c1 = cross(ng, vec3(0.0, 0.0, 1.0));
+    const vec3 c2 = cross(ng, vec3(0.0, 1.0, 0.0));
 
     if (length(c1) > length(c2)) {
       t = c1;
@@ -454,11 +454,13 @@ struct PBRShaderCPU {
     }
 
     t = normalize(t - ng * dot(ng, t));
-    vec3 b = normalize(cross(ng, t));
+    const vec3 b = normalize(cross(ng, t));
     mat3 tbn = mat3(t, b, ng);
+
 #else  // HAS_TANGENTS
     mat3 tbn = v_TBN;
 #endif
+
     vec3 n;
     if (useNormalMap) {
       n = vec3(texture2D(u_NormalSampler, v_UV));
@@ -475,13 +477,13 @@ struct PBRShaderCPU {
   // Implementation from Lambert's Photometria
   // https://archive.org/details/lambertsphotome00lambgoog See also [1],
   // Equation 1
-  vec3 diffuse(PBRInfo pbrInputs) {
+  vec3 diffuse(PBRInfo pbrInputs) const {
     return {pbrInputs.diffuseColor / float(M_PI)};
   }
 
   // The following equation models the Fresnel reflectance term of the spec
   // equation (aka F()) Implementation of fresnel from [4], Equation 15
-  vec3 specularReflection(PBRInfo pbrInputs) {
+  vec3 specularReflection(PBRInfo pbrInputs) const {
     return pbrInputs.reflectance0 +
            (pbrInputs.reflectance90 - pbrInputs.reflectance0) *
                std::pow(clamp(1.0f - pbrInputs.VdotH, 0.0f, 1.0f), 5.0f);
@@ -491,14 +493,14 @@ struct PBRShaderCPU {
   // where rougher material will reflect less light back to the viewer.
   // This implementation is based on [1] Equation 4, and we adopt their
   // modifications to alphaRoughness as input as originally proposed in [2].
-  float geometricOcclusion(PBRInfo pbrInputs) {
-    float NdotL = pbrInputs.NdotL;
-    float NdotV = pbrInputs.NdotV;
-    float r = pbrInputs.alphaRoughness;
+  float geometricOcclusion(PBRInfo pbrInputs) const {
+    const float NdotL = pbrInputs.NdotL;
+    const float NdotV = pbrInputs.NdotV;
+    const float r = pbrInputs.alphaRoughness;
 
-    float attenuationL =
+    const float attenuationL =
         2.0 * NdotL / (NdotL + sqrt(r * r + (1.0 - r * r) * (NdotL * NdotL)));
-    float attenuationV =
+    const float attenuationV =
         2.0 * NdotV / (NdotV + sqrt(r * r + (1.0 - r * r) * (NdotV * NdotV)));
     return attenuationL * attenuationV;
   }
@@ -509,68 +511,62 @@ struct PBRShaderCPU {
   // T. S. Trowbridge, and K. P. Reitz Follows the distribution function
   // recommended in the SIGGRAPH 2013 course notes from EPIC Games [1],
   // Equation 3.
-  float microfacetDistribution(PBRInfo pbrInputs) {
-    float roughnessSq = pbrInputs.alphaRoughness * pbrInputs.alphaRoughness;
-    float f =
+  float microfacetDistribution(PBRInfo pbrInputs) const {
+    const float roughnessSq =
+        pbrInputs.alphaRoughness * pbrInputs.alphaRoughness;
+    const float f =
         (pbrInputs.NdotH * roughnessSq - pbrInputs.NdotH) * pbrInputs.NdotH +
         1.0;
     return roughnessSq / (M_PI * f * f);
   }
 
-    // Global stuff pasted from glsl file
-
-#define uniform
-#define varying
-
-  uniform vec3 u_LightDirection;
-  uniform vec3 u_LightColor;
+  vec3 u_LightDirection;
+  vec3 u_LightColor;
 
   bool useILB = false;
-  uniform samplerCube u_DiffuseEnvSampler;
-  uniform samplerCube u_SpecularEnvSampler;
-  uniform sampler2D u_brdfLUT;
+  samplerCube u_DiffuseEnvSampler;
+  samplerCube u_SpecularEnvSampler;
+  sampler2D u_brdfLUT;
 
   bool useBaseColorMap = false;
-  uniform sampler2D u_BaseColorSampler;
+  sampler2D u_BaseColorSampler;
 
   bool useNormalMap = false;
-  uniform sampler2D u_NormalSampler;
-  uniform float u_NormalScale = 1;
+  sampler2D u_NormalSampler;
+  float u_NormalScale = 1;
 
   bool useEmissiveMap = false;
-  uniform sampler2D u_EmissiveSampler;
-  uniform vec3 u_EmissiveFactor;
+  sampler2D u_EmissiveSampler;
+  vec3 u_EmissiveFactor;
 
   bool useMetalRoughMap = false;
-  uniform sampler2D u_MetallicRoughnessSampler;
+  sampler2D u_MetallicRoughnessSampler;
 
   bool useOcclusionMap = false;
-  uniform sampler2D u_OcclusionSampler;
-  uniform float u_OcclusionStrength = 1;
+  sampler2D u_OcclusionSampler;
+  float u_OcclusionStrength = 1;
 
-  uniform vec2 u_MetallicRoughnessValues = {1, 1};
-  uniform vec4 u_BaseColorFactor;
+  vec2 u_MetallicRoughnessValues = {1, 1};
+  vec4 u_BaseColorFactor;
 
-  uniform vec3 u_Camera;
+  vec3 u_Camera;
 
   // debugging flags used for shader output of intermediate PBR variables
-  uniform vec4 u_ScaleDiffBaseMR{0};
-  uniform vec4 u_ScaleFGDSpec{0};
-  uniform vec4 u_ScaleIBLAmbient{0};
+  vec4 u_ScaleDiffBaseMR{0};
+  vec4 u_ScaleFGDSpec{0};
+  vec4 u_ScaleIBLAmbient{0};
 
-  varying vec3 v_Position;
+  vec3 v_Position;
 
-  varying vec2 v_UV;
+  vec2 v_UV;
 
 #ifdef HAS_NORMALS
 #ifdef HAS_TANGENTS
-  varying mat3 v_TBN;
+  mat3 v_TBN;
 #else
-  varying vec3 v_Normal;
+  vec3 v_Normal;
 #endif
 #endif
-#undef uniform
-#undef varying
 };
 
 }  // namespace pbr_maths
